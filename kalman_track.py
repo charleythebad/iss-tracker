@@ -73,35 +73,51 @@ def residual(z, zhat):
     return y
 
 
-def simulate_pass(ts, iss, site, p, rng):
-    """Truth states, site geometry and noisy measurements, once per DT, rise to set."""
+def simulate_pass(ts, iss, site, p, rng, dt=DT, sigma_range_km=SIGMA_RANGE_KM, sigma_angle_deg=SIGMA_ANGLE_DEG):
+    """Truth states, site geometry and noisy measurements, once per dt, rise to set."""
     start = p["rise"][0].utc_datetime()
     secs = int((p["set"][0].utc_datetime() - start).total_seconds())
-    t = ts.utc([start + timedelta(seconds=s) for s in np.arange(0, secs + 1, DT)])
+    t = ts.utc([start + timedelta(seconds=s) for s in np.arange(0, secs + 1, dt)])
     sat = iss.at(t)
     truth = np.vstack([sat.position.km, sat.velocity.km_per_s]).T
     sites = site.at(t).position.km.T
     rots = [site.rotation_at(t[i]) for i in range(len(t))]
-    noise = np.array([SIGMA_RANGE_KM, np.radians(SIGMA_ANGLE_DEG), np.radians(SIGMA_ANGLE_DEG)])
+    noise = np.array([sigma_range_km, np.radians(sigma_angle_deg), np.radians(sigma_angle_deg)])
     meas = [measure(truth[i, :3], sites[i], rots[i]) + rng.normal(0, noise) for i in range(len(t))]
     return t, truth, sites, rots, np.array(meas), noise
 
 
-def run_ekf(sites, rots, meas, noise):
-    R = np.diag(noise**2)
+def process_noise(dt):
+    """White-acceleration process noise for a position/velocity state."""
     q = SIGMA_ACCEL**2
-    Q = np.block([[q * DT**3 / 3 * np.eye(3), q * DT**2 / 2 * np.eye(3)],
-                  [q * DT**2 / 2 * np.eye(3), q * DT * np.eye(3)]])
-    # Initialize from the first two raw measurements only
-    p0 = to_position(meas[0], sites[0], rots[0])
-    p1 = to_position(meas[1], sites[1], rots[1])
-    x = np.concatenate([p1, (p1 - p0) / DT])
-    P = np.diag([1.0] * 3 + [1.0] * 3)   # 1 km, 1 km/s initial uncertainty
+    return np.block([[q * dt**3 / 3 * np.eye(3), q * dt**2 / 2 * np.eye(3)],
+                     [q * dt**2 / 2 * np.eye(3), q * dt * np.eye(3)]])
+
+
+def initial_state(sites, rots, meas, noise, dt):
+    """Start from the first two raw measurements only: position from the second fix,
+    velocity from the difference. The starting covariance comes from the radar noise
+    mapped into position space, so a noisier radar starts with honest uncertainty."""
+    R = np.diag(noise**2)
+    fixes, covs = [], []
+    for i in (0, 1):
+        fix = lambda z: to_position(z, sites[i], rots[i])
+        J = jacobian(fix, meas[i], np.array([1e-6, 1e-9, 1e-9]))
+        fixes.append(fix(meas[i])); covs.append(J @ R @ J.T)
+    P = np.block([[covs[1], covs[1] / dt],
+                  [covs[1] / dt, (covs[0] + covs[1]) / dt**2]])
+    return np.concatenate([fixes[1], (fixes[1] - fixes[0]) / dt]), P
+
+
+def run_ekf(sites, rots, meas, noise, dt=DT):
+    R = np.diag(noise**2)
+    Q = process_noise(dt)
+    x, P = initial_state(sites, rots, meas, noise, dt)
     eps = np.array([1e-3] * 3 + [1e-6] * 3)
     est, covs = [np.full(6, np.nan), x.copy()], [np.full((6, 6), np.nan), P.copy()]
     for k in range(2, len(meas)):
-        F = jacobian(lambda s: propagate(s, DT), x, eps)
-        x = propagate(x, DT)
+        F = jacobian(lambda s: propagate(s, dt), x, eps)
+        x = propagate(x, dt)
         P = F @ P @ F.T + Q
         h = lambda s: measure(s[:3], sites[k], rots[k])
         H = jacobian(h, x, eps)
