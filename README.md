@@ -77,6 +77,32 @@ One pass over Snowmass Village, CO (peak 57.6°), 401 measurements at 1 s:
 - The filter's actual error stays close to its own 1σ estimate (dashed line),
   so the filter is consistent: neither overconfident nor overly cautious.
 
+## Tests
+
+```sh
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pytest
+```
+
+18 tests, about 1.5 seconds, no network. They use a saved TLE
+(`tests/fixtures/iss.tle`), a fixed start time and the example observer, so
+results don't depend on today's orbit data. The visibility tests need
+`data/de421.bsp` and skip if it hasn't been downloaded yet.
+
+| Area | What's checked |
+|---|---|
+| Geometry | Range/azimuth/elevation match Skyfield to 1e-6; measurement → position → measurement round-trips; azimuth residual wraps through north |
+| Dynamics | Gravity magnitude at ISS altitude; J2 is a 1e-4–3e-3 correction; RK4 conserves orbital energy and polar angular momentum to 1e-9 over a full orbit; propagation stays within 10 m of SGP4 over 2 minutes (measured: 0.76 m) |
+| Passes | Rise < peak < set, peak above 10°, sensible durations and spacing; every visible window is sunlit under a dark sky; daytime passes are never marked visible |
+| Filter | Second-half RMS error under 100 m and 5× better than raw fixes; **statistical consistency**: over 10 Monte Carlo runs, the average NEES stays inside its 95% chi-square bounds on at least 90% of steps (measured: 99%, mean 3.4 against an ideal 3.0) |
+
+NEES (normalized estimation error squared) checks whether the filter is honest
+about its uncertainty: for a consistent filter it follows a chi-square
+distribution with 3 degrees of freedom. To confirm the tests can fail, the
+filter was broken on purpose. Telling it the radar is 10× noisier than it is
+fails the consistency and accuracy tests, and removing the azimuth wrap fails
+the geometry test.
+
 ## Limitations
 
 - **The radar is simulated.** Measurements are generated from the true orbit

@@ -33,8 +33,8 @@ def compass(az_deg):
     return points[round(az_deg / 45) % 8]
 
 
-def find_passes(ts, iss, site, days=DAYS_AHEAD):
-    t0 = ts.now()
+def find_passes(ts, iss, site, days=DAYS_AHEAD, t0=None):
+    t0 = ts.now() if t0 is None else t0
     t1 = ts.utc(t0.utc_datetime() + timedelta(days=days))
     times, events = iss.find_events(site, t0, t1, altitude_degrees=MIN_ELEVATION_DEG)
     passes, current = [], {}

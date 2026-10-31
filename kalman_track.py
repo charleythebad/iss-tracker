@@ -98,7 +98,7 @@ def run_ekf(sites, rots, meas, noise):
     x = np.concatenate([p1, (p1 - p0) / DT])
     P = np.diag([1.0] * 3 + [1.0] * 3)   # 1 km, 1 km/s initial uncertainty
     eps = np.array([1e-3] * 3 + [1e-6] * 3)
-    est, sig = [np.full(6, np.nan), x.copy()], [np.full(3, np.nan), np.sqrt(np.diag(P)[:3])]
+    est, covs = [np.full(6, np.nan), x.copy()], [np.full((6, 6), np.nan), P.copy()]
     for k in range(2, len(meas)):
         F = jacobian(lambda s: propagate(s, DT), x, eps)
         x = propagate(x, DT)
@@ -110,8 +110,8 @@ def run_ekf(sites, rots, meas, noise):
         K = P @ H.T @ np.linalg.inv(S)
         x = x + K @ y
         P = (np.eye(6) - K @ H) @ P
-        est.append(x.copy()); sig.append(np.sqrt(np.diag(P)[:3]))
-    return np.array(est), np.array(sig)
+        est.append(x.copy()); covs.append(P.copy())
+    return np.array(est), np.array(covs)
 
 
 def main():
@@ -119,7 +119,8 @@ def main():
     cfg, site, tz = load_observer()
     p = max(find_passes(ts, iss, site, days=1), key=lambda p: p["peak"][1])
     t, truth, sites, rots, meas, noise = simulate_pass(ts, iss, site, p, np.random.default_rng(SEED))
-    est, sig = run_ekf(sites, rots, meas, noise)
+    est, covs = run_ekf(sites, rots, meas, noise)
+    sig = np.sqrt(np.diagonal(covs[:, :3, :3], axis1=1, axis2=2))
 
     raw_err = np.array([np.linalg.norm(to_position(meas[i], sites[i], rots[i]) - truth[i, :3])
                         for i in range(len(t))]) * 1000
