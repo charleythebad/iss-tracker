@@ -130,6 +130,39 @@ from the radar noise fixed it: cheap-radar error fell from ~4.4 km to ~0.7 km,
 ANEES returned to ~3.5, and divergences dropped to 0. A regression test now
 covers it.
 
+## Radar bias experiment
+
+`bias_experiment.py` runs the same pass with the same random noise twice: once
+with a healthy radar, and once with a radar that always reads 0.1° too high in
+elevation. Random noise points a different way each time, so it averages out
+as readings pile up. A bias points the same way every time, so it doesn't.
+
+![Filter error with and without a 0.1° elevation bias](docs/bias_experiment.png)
+
+| Time | No bias: error | 0.1° bias: error | Filter thinks | Biased run off by |
+|---|---|---|---|---|
+| 10 s | 975 m | 1,882 m | 600 m | 3× |
+| 60 s | 407 m | 2,183 m | 200 m | 11× |
+| 120 s | 90 m | 1,448 m | 93 m | 16× |
+| 240 s | 8 m | 650 m | 40 m | 16× |
+| 360 s | 37 m | 616 m | 52 m | 12× |
+
+- **The error hits a floor.** The healthy filter drops to single-digit meters;
+  the biased one stalls around 550–650 m. More readings stop helping.
+- **The filter is confident and wrong.** Its uncertainty (the dashed lines) is
+  identical in both runs, because it depends on the noise settings and geometry,
+  not on whether the readings make sense. The biased filter claims ~40 m while
+  it is off by ~650 m, so nothing inside it raises an alarm.
+- **Physics pushes back.** A 0.1° error at 500 km is ~870 m, but the floor is
+  lower: no real orbit fits readings that are always high, so the filter settles
+  between the orbit model and the bad data.
+
+One radar can't detect its own bias. A second radar at another site would
+disagree, and a third would show which one is wrong. The fix is to add the bias
+to the filter's state and estimate it. The numbers above are from one live pass
+(Oct 31, 2026); the script uses the current orbit, so they shift a little from
+day to day.
+
 ## Tests
 
 ```sh
@@ -165,14 +198,14 @@ the geometry test.
 - The filter's dynamics model (two-body + J2) is simpler than SGP4, which also
   models drag and other effects. Process noise absorbs the difference over one
   pass. Longer tracking would need a fuller force model.
-- Noise is independent and Gaussian, and there are no missed detections, false
-  alarms or bias. Real radar data has all of these.
+- Noise is independent and Gaussian, with no missed detections or false
+  alarms. Bias can be simulated (see above) but the filter doesn't estimate it.
 - Visibility ignores weather, terrain and the ISS's brightness (magnitude).
 
 ## Possible next steps
 
 - Track across several passes, propagating through the gaps between them
-- Add measurement bias and estimate it as part of the state
+- Estimate radar bias as part of the state, using two or more radar sites
 - Validate pass times against a published source
 
 ## Tech

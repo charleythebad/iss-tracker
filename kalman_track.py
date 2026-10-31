@@ -73,7 +73,7 @@ def residual(z, zhat):
     return y
 
 
-def simulate_pass(ts, iss, site, p, rng, dt=DT, sigma_range_km=SIGMA_RANGE_KM, sigma_angle_deg=SIGMA_ANGLE_DEG):
+def simulate_pass(ts, iss, site, p, rng, dt=DT, sigma_range_km=SIGMA_RANGE_KM, sigma_angle_deg=SIGMA_ANGLE_DEG, bias_el_deg=0.0):
     """Truth states, site geometry and noisy measurements, once per dt, rise to set."""
     start = p["rise"][0].utc_datetime()
     secs = int((p["set"][0].utc_datetime() - start).total_seconds())
@@ -83,7 +83,8 @@ def simulate_pass(ts, iss, site, p, rng, dt=DT, sigma_range_km=SIGMA_RANGE_KM, s
     sites = site.at(t).position.km.T
     rots = [site.rotation_at(t[i]) for i in range(len(t))]
     noise = np.array([sigma_range_km, np.radians(sigma_angle_deg), np.radians(sigma_angle_deg)])
-    meas = [measure(truth[i, :3], sites[i], rots[i]) + rng.normal(0, noise) for i in range(len(t))]
+    bias = np.array([0.0, 0.0, np.radians(bias_el_deg)])
+    meas = [measure(truth[i, :3], sites[i], rots[i]) + bias + rng.normal(0, noise) for i in range(len(t))]
     return t, truth, sites, rots, np.array(meas), noise
 
 
