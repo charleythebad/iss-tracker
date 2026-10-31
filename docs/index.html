@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ISS Tracker</title>
+<meta name="description" content="ISS pass prediction and simulated radar tracking with Extended and Unscented Kalman Filters.">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --land: #ecebe6;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --wash-1: rgba(42,120,214,0.10);
+  --good: #006300;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --land: #262624;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --wash-1: rgba(57,135,229,0.14);
+    --good: #0ca30c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255,255,255,0.10);
+  --land: #262624;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --wash-1: rgba(57,135,229,0.14);
+  --good: #0ca30c;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--page);
+  color: var(--text-primary);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+a { color: var(--series-1); }
+main { max-width: 1120px; margin: 0 auto; padding: 32px 16px 64px; }
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+h1 { font-size: 28px; line-height: 1.2; margin: 0 0 4px; font-weight: 650; letter-spacing: -0.01em; }
+h2 { font-size: 19px; margin: 0 0 4px; font-weight: 620; }
+p.lede { margin: 0; color: var(--text-secondary); max-width: 640px; }
+.sub { color: var(--text-secondary); margin: 0 0 16px; max-width: 760px; }
+.repo { font-weight: 560; text-decoration: none; border: 1px solid var(--border); background: var(--surface-1); padding: 8px 14px; border-radius: 8px; white-space: nowrap; }
+.repo:hover { text-decoration: underline; }
+section { margin-top: 40px; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.tiles { display: grid; grid-template-columns: 1.4fr repeat(3, 1fr); gap: 12px; }
+.tile .label { color: var(--text-secondary); font-size: 13px; }
+.tile .value { font-size: 30px; font-weight: 620; line-height: 1.2; margin-top: 4px; }
+.tile.hero .value { font-size: 52px; }
+.tile .note { color: var(--text-muted); font-size: 12.5px; margin-top: 4px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-sky { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.chart-title { font-weight: 600; font-size: 14px; margin: 0 0 2px; }
+.chart-sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 10px; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { fill: var(--text-muted); font-size: 11px; font-family: inherit; }
+svg .tick-label { font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--text-secondary); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.key-line { width: 16px; height: 0; border-top: 2px solid; display: inline-block; }
+.key-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.key-band { width: 16px; height: 10px; display: inline-block; border-radius: 2px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 16px; }
+.seg { display: inline-flex; flex-wrap: wrap; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 2px; }
+.seg button { font: inherit; font-size: 13.5px; color: var(--text-secondary); background: transparent; border: 0; border-radius: 7px; padding: 6px 12px; cursor: pointer; }
+.seg button:hover { background: var(--grid); }
+.seg button[aria-pressed="true"] { background: var(--text-primary); color: var(--surface-1); font-weight: 560; }
+.btn { font: inherit; font-size: 13px; color: var(--text-primary); background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+.btn:hover { background: var(--grid); }
+.callout { border-left: 2px solid var(--axis); padding: 2px 0 2px 12px; color: var(--text-secondary); font-size: 14px; margin: 14px 0 0; }
+.callout strong { color: var(--text-primary); }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th, td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--grid); }
+th { color: var(--text-secondary); font-weight: 560; font-size: 12.5px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; padding-right: 18px; padding-left: 10px; }
+td.num:last-child, th.num:last-child { padding-right: 0; }
+tr.vis td:first-child { font-weight: 600; }
+.badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--text-secondary); }
+.badge.on { color: var(--good); font-weight: 560; }
+.scroll { overflow-x: auto; }
+#tip { position: fixed; pointer-events: none; z-index: 10; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border); box-shadow: 0 4px 16px rgba(0,0,0,0.12); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; min-width: 120px; opacity: 0; transition: opacity .08s; }
+#tip .row { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+#tip .row .k { color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; }
+#tip .row .v { font-weight: 620; font-variant-numeric: tabular-nums; }
+#tip .head { color: var(--text-secondary); margin-bottom: 4px; }
+footer { margin-top: 48px; color: var(--text-muted); font-size: 13px; }
+footer p { margin: 4px 0; }
+.err { color: var(--text-secondary); font-size: 13px; }
+@media (max-width: 860px) {
+  .tiles { grid-template-columns: 1fr 1fr; }
+  .tile.hero { grid-column: 1 / -1; }
+  .grid2, .grid-sky { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>ISS Tracker</h1>
+      <p class="lede">Predicting the International Space Station's passes from public orbit data, then tracking it through a pass with simulated radar and two Kalman filters.</p>
+    </div>
+    <a class="repo" href="https://github.com/charleythebad/iss-tracker">View the code on GitHub →</a>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+
+  <section>
+    <h2>Where it goes</h2>
+    <p class="sub" id="map-sub">The ground track for one orbit either side of the showcase pass. The shaded circle is the area where the ISS is more than 10° above the horizon for an observer at the marked site.</p>
+    <div class="card">
+      <div id="map"></div>
+      <div class="legend">
+        <span><i class="key-line" style="border-color:var(--text-muted)"></i>Ground track</span>
+        <span><i class="key-line" style="border-color:var(--series-1)"></i>In view of the site (above 10°)</span>
+        <span><i class="key-band" style="background:var(--wash-1);border:1px solid var(--series-1)"></i>Viewing area</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>A pass across the sky</h2>
+    <p class="sub" id="sky-sub"></p>
+    <div class="grid-sky">
+      <div class="card">
+        <p class="chart-title">Sky path, looking up</p>
+        <p class="chart-sub">Center is straight overhead; the outer ring is the horizon. North is up.</p>
+        <div id="sky"></div>
+        <div class="controls" style="margin:12px 0 0">
+          <button class="btn" id="play">▶ Play the pass</button>
+          <span class="chart-sub" style="margin:0" id="play-readout"></span>
+        </div>
+        <div class="legend">
+          <span><i class="key-line" style="border-color:var(--text-muted)"></i>Above the horizon, not visible</span>
+          <span><i class="key-line" style="border-color:var(--series-1)"></i>Visible: sunlit ISS, dark sky</span>
+        </div>
+      </div>
+      <div class="card">
+        <p class="chart-title">Every pass above 10°</p>
+        <p class="chart-sub" id="passes-sub"></p>
+        <div class="scroll"><table id="passes"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Radar noise vs. the filters</h2>
+    <p class="sub">A simulated ground radar at the site measures range, azimuth and elevation, with random noise added. Pick a radar to see how its noise scatters the raw readings, and how the Extended (EKF) and Unscented (UKF) Kalman filters recover the true path.</p>
+    <div class="controls" id="scenario-controls"><div class="seg" role="group" aria-label="Radar quality" id="seg"></div></div>
+    <div class="grid2">
+      <div class="card">
+        <p class="chart-title">Raw readings and filtered tracks</p>
+        <p class="chart-sub" id="noise-sub"></p>
+        <div id="noise-sky"></div>
+        <div class="legend">
+          <span><i class="key-dot" style="background:var(--text-muted);opacity:.6"></i>Raw radar readings</span>
+          <span><i class="key-line" style="border-color:var(--text-primary)"></i>True path</span>
+          <span><i class="key-line" style="border-color:var(--series-1)"></i>EKF</span>
+          <span><i class="key-line" style="border-color:var(--series-2)"></i>UKF</span>
+        </div>
+      </div>
+      <div class="card">
+        <p class="chart-title">Position error over the pass</p>
+        <p class="chart-sub" id="err-sub"></p>
+        <div id="err"></div>
+        <div class="legend">
+          <span><i class="key-dot" style="background:var(--text-muted);opacity:.6"></i>Raw readings (one run)</span>
+          <span><i class="key-line" style="border-color:var(--series-1)"></i>EKF</span>
+          <span><i class="key-line" style="border-color:var(--series-2)"></i>UKF</span>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <p class="chart-title">Is each filter honest about its own error?</p>
+      <p class="chart-sub">ANEES compares each filter's actual error with the error it claims. An honest filter averages 3.0 and stays inside the shaded 95% band; above it, the filter is overconfident.</p>
+      <div id="anees"></div>
+      <div class="legend">
+        <span><i class="key-line" style="border-color:var(--series-1)"></i>EKF</span>
+        <span><i class="key-line" style="border-color:var(--series-2)"></i>UKF</span>
+        <span><i class="key-band" style="background:var(--grid)"></i>95% band for an honest filter</span>
+      </div>
+      <p class="callout" id="anees-callout"></p>
+    </div>
+  </section>
+
+  <section>
+    <h2>All four radars</h2>
+    <p class="sub" id="table-sub"></p>
+    <div class="card scroll"><table id="summary"></table></div>
+  </section>
+
+  <footer>
+    <p><strong>The radar is simulated.</strong> Readings are the real orbit (SGP4, CelesTrak data) plus random noise; no real sensor data is involved.</p>
+    <p id="foot-data"></p>
+    <p>Regenerate with <code>python export_site_data.py</code>. Built with Python, Skyfield, NumPy and D3.</p>
+  </footer>
+</main>
+<div id="tip" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script>
+(async function () {
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const fmtM = m => m >= 1000 ? (m / 1000).toLocaleString(undefined, {maximumFractionDigits: 1}) + " km" : Math.round(m) + " m";
+  const tip = document.getElementById("tip");
+  const el = (tag, attrs = {}, parent) => {
+    const n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    if (parent) parent.appendChild(n);
+    return n;
+  };
+
+  function showTip(evt, head, rows) {
+    tip.replaceChildren();
+    if (head) { const h = document.createElement("div"); h.className = "head"; h.textContent = head; tip.appendChild(h); }
+    for (const [label, value, color] of rows) {
+      const r = document.createElement("div"); r.className = "row";
+      const k = document.createElement("span"); k.className = "k";
+      if (color) { const key = document.createElement("i"); key.className = "key-line"; key.style.borderColor = color; k.appendChild(key); }
+      k.appendChild(document.createTextNode(label));
+      const v = document.createElement("span"); v.className = "v"; v.textContent = value;
+      r.append(k, v); tip.appendChild(r);
+    }
+    const x = Math.min(evt.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
+    const y = Math.min(evt.clientY + 14, window.innerHeight - tip.offsetHeight - 8);
+    tip.style.left = x + "px"; tip.style.top = y + "px"; tip.style.opacity = 1;
+  }
+  const hideTip = () => { tip.style.opacity = 0; };
+
+  let data;
+  try {
+    data = await (await fetch("data.json")).json();
+  } catch (e) {
+    document.querySelector("main").insertAdjacentHTML("afterbegin", '<p class="err">Could not load data.json. Serve this folder over HTTP (for example <code>python -m http.server</code> in docs/).</p>');
+    return;
+  }
+
+  // ---------- tiles ----------
+  const sc0 = data.scenarios[0];
+  const ekf0 = sc0.summary.EKF.rms_m;
+  const half = Math.floor(sc0.raw_err_m.length / 2);
+  const rawTail = sc0.raw_err_m.slice(half);
+  const rawRms = Math.sqrt(rawTail.reduce((a, b) => a + b * b, 0) / rawTail.length);
+  const visibleCount = data.passes.filter(p => p.visible).length;
+  const tiles = [
+    ["hero", "Tracking error with a precision radar", fmtM(ekf0), `Median over ${data.runs} simulated passes, second half of the pass`],
+    ["", "Better than raw readings", Math.round(rawRms / ekf0) + "×", `Raw radar fixes: ${fmtM(rawRms)}`],
+    ["", "Visible passes", `${visibleCount} of ${data.passes.length}`, `Over ${data.site.name.split(",")[0]}, ${data.window}`],
+    ["", "Automated tests", "24", "Geometry, physics, visibility, filter honesty"],
+  ];
+  const tilesEl = document.getElementById("tiles");
+  for (const [cls, label, value, note] of tiles) {
+    const t = document.createElement("div"); t.className = "card tile " + cls;
+    for (const [c, txt] of [["label", label], ["value", value], ["note", note]]) {
+      const d = document.createElement("div"); d.className = c; d.textContent = txt; t.appendChild(d);
+    }
+    tilesEl.appendChild(t);
+  }
+
+  // ---------- map ----------
+  async function drawMap() {
+    const host = document.getElementById("map");
+    const W = 1040, H = 520;
+    const svg = el("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "World map with the ISS ground track"}, host);
+    const proj = d3.geoEquirectangular().fitSize([W, H], {type: "Sphere"});
+    const path = d3.geoPath(proj);
+    el("path", {d: path({type: "Sphere"}), fill: "var(--surface-1)", stroke: "var(--axis)", "stroke-width": 1}, svg);
+    el("path", {d: path(d3.geoGraticule10()), fill: "none", stroke: "var(--grid)", "stroke-width": 1}, svg);
+    try {
+      const world = await (await fetch("https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-110m.json")).json();
+      el("path", {d: path(topojson.feature(world, world.objects.land)), fill: "var(--land)", stroke: "var(--axis)", "stroke-width": 0.6}, svg);
+    } catch (e) { /* graticule alone still reads */ }
+    const circle = d3.geoCircle().center([data.site.lon, data.site.lat]).radius(data.footprint_deg)();
+    el("path", {d: path(circle), fill: "var(--wash-1)", stroke: "var(--series-1)", "stroke-width": 1}, svg);
+
+    const g = data.ground;
+    // split into runs at the antimeridian and at in-view changes
+    const runs = [];
+    let cur = null;
+    for (let i = 0; i < g.lat.length; i++) {
+      const wrap = cur && Math.abs(g.lon[i] - g.lon[i - 1]) > 180;
+      if (!cur || wrap || g.in_view[i] !== cur.view) {
+        if (cur && !wrap) cur.pts.push([g.lon[i], g.lat[i]]);
+        cur = {view: g.in_view[i], pts: []}; runs.push(cur);
+      }
+      cur.pts.push([g.lon[i], g.lat[i]]);
+    }
+    const line = d3.line(d => proj(d)[0], d => proj(d)[1]);
+    for (const r of runs) {
+      el("path", {d: line(r.pts), fill: "none", stroke: r.view ? "var(--series-1)" : "var(--text-muted)",
+        "stroke-width": r.view ? 3 : 1.5, "stroke-linecap": "round", "stroke-linejoin": "round"}, svg);
+    }
+    const [sx, sy] = proj([data.site.lon, data.site.lat]);
+    el("circle", {cx: sx, cy: sy, r: 5, fill: "var(--text-primary)", stroke: "var(--surface-1)", "stroke-width": 2}, svg);
+    const lab = el("text", {x: sx + 10, y: sy - 8, style: "fill:var(--text-primary);font-size:13px;font-weight:600"}, svg);
+    lab.textContent = data.site.name;
+
+    const cursor = el("circle", {r: 5, fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2, opacity: 0}, svg);
+    const pts = g.lat.map((la, i) => proj([g.lon[i], la]));
+    svg.addEventListener("pointermove", e => {
+      const p = d3.pointer(e, svg);
+      const scale = W / svg.getBoundingClientRect().width;
+      let best = -1, bd = Infinity;
+      pts.forEach(([x, y], i) => { const d = (x - p[0]) ** 2 + (y - p[1]) ** 2; if (d < bd) { bd = d; best = i; } });
+      if (Math.sqrt(bd) > 30 * scale) { cursor.setAttribute("opacity", 0); hideTip(); return; }
+      cursor.setAttribute("cx", pts[best][0]); cursor.setAttribute("cy", pts[best][1]); cursor.setAttribute("opacity", 1);
+      showTip(e, g.time[best], [["Latitude", g.lat[best].toFixed(1) + "°"], ["Longitude", g.lon[best].toFixed(1) + "°"],
+        ["In view of site", g.in_view[best] ? "yes" : "no"], ["In sunlight", g.sunlit[best] ? "yes" : "no"]]);
+    });
+    svg.addEventListener("pointerleave", () => { cursor.setAttribute("opacity", 0); hideTip(); });
+  }
+
+  // ---------- polar sky chart helper ----------
+  function skyChart(host, size = 440) {
+    const svg = el("svg", {viewBox: `0 0 ${size} ${size}`, role: "img"}, host);
+    const c = size / 2, R = size / 2 - 26;
+    const xy = (az, elv) => {
+      const r = R * (90 - elv) / 90, a = az * Math.PI / 180;
+      return [c + r * Math.sin(a), c - r * Math.cos(a)];
+    };
+    el("circle", {cx: c, cy: c, r: R, fill: "var(--surface-1)", stroke: "var(--axis)", "stroke-width": 1}, svg);
+    for (const e of [30, 60]) el("circle", {cx: c, cy: c, r: R * (90 - e) / 90, fill: "none", stroke: "var(--grid)", "stroke-width": 1}, svg);
+    for (let a = 0; a < 360; a += 45) {
+      const [x, y] = xy(a, 0);
+      el("line", {x1: c, y1: c, x2: x, y2: y, stroke: "var(--grid)", "stroke-width": 1}, svg);
+    }
+    for (const [a, t] of [[0, "N"], [90, "E"], [180, "S"], [270, "W"]]) {
+      const [x, y] = xy(a, -9);
+      const n = el("text", {x, y: y + 4, "text-anchor": "middle", style: "font-weight:600;fill:var(--text-secondary);font-size:12px"}, svg);
+      n.textContent = t;
+    }
+    for (const e of [30, 60]) {
+      const [x, y] = xy(0, e);
+      const n = el("text", {x: x + 4, y: y - 3, class: "tick-label"}, svg); n.textContent = e + "°";
+    }
+    const pathOf = (az, elv) => d3.line().defined((_, i) => az[i] != null && elv[i] != null && elv[i] > -5)
+      .x((_, i) => xy(az[i], Math.max(elv[i], 0))[0]).y((_, i) => xy(az[i], Math.max(elv[i], 0))[1])(az);
+    return {svg, xy, pathOf, c, R};
+  }
+
+  // ---------- the showcase pass ----------
+  function drawSky() {
+    const s = data.sky;
+    const vis = s.sunlit.map((lit, i) => lit && s.sun_alt[i] < -6);
+    const first = vis.indexOf(true), last = vis.lastIndexOf(true);
+    document.getElementById("sky-sub").textContent =
+      `${data.showcase.day}, rising ${data.showcase.rise}: the ISS climbs to ${data.showcase.peak_el}° above the horizon. ` +
+      `It is visible from ${s.time[first]} to ${s.time[last]}, while the station is in sunlight and the sky is still dark before dawn.`;
+    const {svg, xy, pathOf} = skyChart(document.getElementById("sky"));
+    svg.setAttribute("aria-label", "Sky chart of the ISS pass");
+    el("path", {d: pathOf(s.az, s.el), fill: "none", stroke: "var(--text-muted)", "stroke-width": 2, "stroke-linecap": "round"}, svg);
+    const vAz = s.az.map((a, i) => vis[i] ? a : null), vEl = s.el.map((e, i) => vis[i] ? e : null);
+    el("path", {d: pathOf(vAz, vEl), fill: "none", stroke: "var(--series-1)", "stroke-width": 4, "stroke-linecap": "round"}, svg);
+    const [rx, ry] = xy(s.az[0], 0), [tx, ty] = xy(s.az[s.az.length - 1], 0);
+    for (const [x, y, t] of [[rx, ry, "rise " + s.time[0]], [tx, ty, "set"]]) {
+      const n = el("text", {x, y: y + (y > 220 ? 16 : -8), "text-anchor": "middle", style: "fill:var(--text-secondary)"}, svg);
+      n.textContent = t;
+    }
+    const dot = el("circle", {r: 7, fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2, opacity: 0}, svg);
+    const readout = document.getElementById("play-readout");
+    const place = i => {
+      const [x, y] = xy(s.az[i], Math.max(0, s.el[i]));
+      dot.setAttribute("cx", x); dot.setAttribute("cy", y); dot.setAttribute("opacity", 1);
+      dot.setAttribute("fill", vis[i] ? "var(--series-1)" : "var(--text-muted)");
+      readout.textContent = `${s.time[i]} · ${s.el[i].toFixed(0)}° up · ${vis[i] ? "visible" : (s.sunlit[i] ? "sky too bright" : "in Earth's shadow")}`;
+    };
+    let timer = null;
+    document.getElementById("play").addEventListener("click", () => {
+      if (timer) { clearInterval(timer); timer = null; }
+      let i = 0;
+      timer = setInterval(() => { place(i); if (++i >= s.az.length) { clearInterval(timer); timer = null; } }, 90);
+    });
+    const pts = s.az.map((a, i) => xy(a, Math.max(0, s.el[i])));
+    svg.addEventListener("pointermove", e => {
+      const p = d3.pointer(e, svg);
+      let best = 0, bd = Infinity;
+      pts.forEach(([x, y], i) => { const d = (x - p[0]) ** 2 + (y - p[1]) ** 2; if (d < bd) { bd = d; best = i; } });
+      if (Math.sqrt(bd) > 28) { hideTip(); return; }
+      place(best);
+      showTip(e, s.time[best], [["Elevation", s.el[best].toFixed(1) + "°"], ["Azimuth", s.az[best].toFixed(0) + "°"],
+        ["Distance", Math.round(s.range_km[best]).toLocaleString() + " km"], ["Visible", vis[best] ? "yes" : "no"]]);
+    });
+    svg.addEventListener("pointerleave", hideTip);
+
+    // pass table
+    document.getElementById("passes-sub").textContent = `${data.window}, local time. Snapshot from orbit data of ${data.tle_epoch}.`;
+    const compass = a => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(a / 45) % 8];
+    const table = document.getElementById("passes");
+    const head = table.createTHead().insertRow();
+    for (const [t, num] of [["Day", 0], ["Rises", 0], ["Peak", 1], ["Path", 0], ["Visible", 0]]) {
+      const th = document.createElement("th"); th.textContent = t; if (num) th.className = "num"; head.appendChild(th);
+    }
+    const body = table.createTBody();
+    for (const p of data.passes) {
+      const row = body.insertRow(); if (p.visible) row.className = "vis";
+      const cells = [p.day, p.rise, p.peak_el.toFixed(0) + "°", compass(p.rise_az) + " → " + compass(p.set_az)];
+      cells.forEach((v, i) => { const td = row.insertCell(); td.textContent = v; if (i === 2) td.className = "num"; });
+      const td = row.insertCell();
+      const b = document.createElement("span"); b.className = "badge" + (p.visible ? " on" : "");
+      b.textContent = p.visible ? "✓ " + p.visible[0] + "–" + p.visible[1] : "—";
+      td.appendChild(b);
+    }
+  }
+
+  // ---------- scenarios ----------
+  let current = 0;
+  const seg = document.getElementById("seg");
+  data.scenarios.forEach((sc, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = sc.label; b.setAttribute("aria-pressed", i === 0);
+    b.addEventListener("click", () => { current = i; [...seg.children].forEach((x, j) => x.setAttribute("aria-pressed", j === i)); drawScenario(); });
+    seg.appendChild(b);
+  });
+
+  function lineChart(host, {xs, series, yLog, band, dots, fmtY, xMax, W = 520, H = 300}) {
+    host.replaceChildren();
+    const m = {l: 56, r: 14, t: 10, b: 34};
+    const svg = el("svg", {viewBox: `0 0 ${W} ${H}`, role: "img"}, host);
+    const all = series.flatMap(s => s.ys).concat(dots ? dots.ys : []).filter(v => v != null && v > 0);
+    if (band) all.push(...band);
+    const x = d3.scaleLinear().domain([0, xMax]).range([m.l, W - m.r]);
+    const y = (yLog ? d3.scaleLog() : d3.scaleLinear()).domain(d3.extent(all)).nice().range([H - m.b, m.t]).clamp(true);
+    for (const t of y.ticks(yLog ? 5 : 5).filter((t, i, a) => !yLog || a.length < 8 || Math.log10(t) % 1 === 0)) {
+      el("line", {x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: "var(--grid)", "stroke-width": 1}, svg);
+      const n = el("text", {x: m.l - 8, y: y(t) + 4, "text-anchor": "end", class: "tick-label"}, svg); n.textContent = fmtY(t);
+    }
+    for (const t of x.ticks(6)) {
+      const n = el("text", {x: x(t), y: H - m.b + 18, "text-anchor": "middle", class: "tick-label"}, svg); n.textContent = t;
+    }
+    el("line", {x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, stroke: "var(--axis)", "stroke-width": 1}, svg);
+    const xl = el("text", {x: W - m.r, y: H - 2, "text-anchor": "end"}, svg); xl.textContent = "seconds since rise";
+    if (band) {
+      el("rect", {x: m.l, width: W - m.l - m.r, y: y(band[1]), height: y(band[0]) - y(band[1]), fill: "var(--grid)"}, svg);
+      el("line", {x1: m.l, x2: W - m.r, y1: y(3), y2: y(3), stroke: "var(--axis)", "stroke-width": 1}, svg);
+    }
+    if (dots) {
+      const step = Math.max(1, Math.floor(dots.ys.length / 220));
+      dots.ys.forEach((v, i) => { if (v > 0 && i % step === 0) el("circle", {cx: x(dots.xs[i]), cy: y(v), r: 2, fill: "var(--text-muted)", opacity: 0.55}, svg); });
+    }
+    for (const s of series) {
+      const d = d3.line().defined(v => v != null && v > 0).x((_, i) => x(xs[i])).y(v => y(v))(s.ys);
+      el("path", {d, fill: "none", stroke: s.color, "stroke-width": s.width || 2, "stroke-linejoin": "round", "stroke-linecap": "round"}, svg);
+    }
+    // crosshair
+    const hair = el("line", {y1: m.t, y2: H - m.b, stroke: "var(--axis)", "stroke-width": 1, opacity: 0}, svg);
+    const marks = series.map(s => el("circle", {r: 4, fill: s.color, stroke: "var(--surface-1)", "stroke-width": 2, opacity: 0}, svg));
+    el("rect", {x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "transparent"}, svg)
+      .addEventListener("pointermove", e => {
+        const px = x.invert(d3.pointer(e, svg)[0]);
+        const i = Math.max(0, Math.min(xs.length - 1, d3.bisectCenter(xs, px)));
+        hair.setAttribute("x1", x(xs[i])); hair.setAttribute("x2", x(xs[i])); hair.setAttribute("opacity", 1);
+        const rows = [];
+        series.forEach((s, k) => {
+          const v = s.ys[i];
+          if (v != null && v > 0) { marks[k].setAttribute("cx", x(xs[i])); marks[k].setAttribute("cy", y(v)); marks[k].setAttribute("opacity", 1); }
+          rows.push([s.name, v == null ? "—" : fmtY(v, true), s.color]);
+        });
+        if (dots && dots.ys[i] != null) rows.push(["Raw reading", fmtY(dots.ys[i], true), css("--text-muted")]);
+        showTip(e, `${xs[i]} s after rise`, rows);
+      });
+    svg.lastChild.addEventListener("pointerleave", () => { hair.setAttribute("opacity", 0); marks.forEach(mk => mk.setAttribute("opacity", 0)); hideTip(); });
+  }
+
+  function drawScenario() {
+    const sc = data.scenarios[current];
+    const ek = sc.summary.EKF, uk = sc.summary.UKF;
+    document.getElementById("noise-sub").textContent =
+      `${sc.label}: ±${sc.sigma_range_m >= 1000 ? sc.sigma_range_m / 1000 + " km" : sc.sigma_range_m + " m"} in range, ±${sc.sigma_angle_deg}° in angle, one reading every ${sc.dt} s. One sample run.`;
+    document.getElementById("err-sub").textContent = `Median of ${data.runs} runs, log scale. Second-half error: EKF ${fmtM(ek.rms_m)}, UKF ${fmtM(uk.rms_m)}.`;
+
+    // sky view of raw readings and tracks
+    const host = document.getElementById("noise-sky"); host.replaceChildren();
+    const {svg, xy, pathOf} = skyChart(host);
+    svg.setAttribute("aria-label", "Sky chart of raw radar readings and filtered tracks");
+    const smp = sc.sample;
+    smp.raw.az.forEach((a, i) => {
+      const e = smp.raw.el[i]; if (e < 0) return;
+      const [x, y] = xy(a, e);
+      el("circle", {cx: x, cy: y, r: 2, fill: "var(--text-muted)", opacity: 0.55}, svg);
+    });
+    el("path", {d: pathOf(smp.ukf.az, smp.ukf.el), fill: "none", stroke: "var(--series-2)", "stroke-width": 3.5, "stroke-linejoin": "round", "stroke-linecap": "round"}, svg);
+    el("path", {d: pathOf(smp.ekf.az, smp.ekf.el), fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"}, svg);
+    el("path", {d: pathOf(smp.truth.az, smp.truth.el), fill: "none", stroke: "var(--text-primary)", "stroke-width": 1}, svg);
+
+    const fmtErr = (v, full) => v >= 1000 ? (full ? (v / 1000).toFixed(1) : d3.format("~g")(v / 1000)) + " km" : (full ? Math.round(v) : d3.format("~g")(v)) + " m";
+    const xMax = sc.t[sc.t.length - 1];
+    lineChart(document.getElementById("err"), {
+      xs: sc.t, xMax, yLog: true, fmtY: fmtErr,
+      series: [{name: "UKF", ys: sc.median_err_m.UKF, color: css("--series-2"), width: 3.5}, {name: "EKF", ys: sc.median_err_m.EKF, color: css("--series-1")}],
+      dots: {xs: sc.t, ys: sc.raw_err_m},
+    });
+    lineChart(document.getElementById("anees"), {
+      xs: sc.t, xMax, yLog: true, W: 1060, H: 280, band: data.anees_band, fmtY: (v, full) => full ? v.toFixed(2) : d3.format("~g")(v),
+      series: [{name: "UKF", ys: sc.anees.UKF, color: css("--series-2"), width: 3.5}, {name: "EKF", ys: sc.anees.EKF, color: css("--series-1")}],
+    });
+    const verdict = a => a > data.anees_band[1] * 1.5 ? "overconfident" : "honest";
+    const callout = document.getElementById("anees-callout");
+    callout.replaceChildren();
+    const strong = document.createElement("strong");
+    if (ek.anees > data.anees_band[1] * 1.5) {
+      strong.textContent = "The EKF breaks down here. ";
+      callout.append(strong, `Its ANEES averages ${ek.anees.toFixed(1)}, so it believes it is about ${Math.sqrt(ek.anees / 3).toFixed(1)}× more accurate than it is. ` +
+        `The UKF stays honest (${uk.anees.toFixed(1)}) and is ${Math.round((1 - uk.rms_m / ek.rms_m) * 100)}% more accurate, because its sigma points capture the curved geometry that the EKF's straight-line approximation misses.`);
+    } else {
+      strong.textContent = "Both filters are " + verdict(ek.anees) + " here. ";
+      callout.append(strong, `EKF ${ek.anees.toFixed(2)}, UKF ${uk.anees.toFixed(2)}. With this much accuracy the problem is nearly linear, so the cheaper EKF does just as well.`);
+    }
+  }
+
+  function drawSummary() {
+    document.getElementById("table-sub").textContent = `Each radar flown through the same pass ${data.runs} times with fresh noise. Error is the median second-half RMS; time is per pass on one CPU core.`;
+    const t = document.getElementById("summary");
+    const h = t.createTHead().insertRow();
+    for (const [txt, num] of [["Radar", 0], ["Noise (range / angle)", 0], ["Update", 1], ["EKF error", 1], ["UKF error", 1], ["EKF ANEES", 1], ["UKF ANEES", 1], ["EKF time", 1], ["UKF time", 1]]) {
+      const th = document.createElement("th"); th.textContent = txt; if (num) th.className = "num"; h.appendChild(th);
+    }
+    const b = t.createTBody();
+    for (const sc of data.scenarios) {
+      const r = b.insertRow(), E = sc.summary.EKF, U = sc.summary.UKF;
+      const noise = (sc.sigma_range_m >= 1000 ? sc.sigma_range_m / 1000 + " km" : sc.sigma_range_m + " m") + " / " + sc.sigma_angle_deg + "°";
+      [[sc.label.split(",")[0], 0], [noise, 0], [sc.dt + " s", 1], [fmtM(E.rms_m), 1], [fmtM(U.rms_m), 1],
+       [E.anees.toFixed(2), 1], [U.anees.toFixed(2), 1], [Math.round(E.ms) + " ms", 1], [Math.round(U.ms) + " ms", 1]]
+        .forEach(([v, num]) => { const td = r.insertCell(); td.textContent = v; if (num) td.className = "num"; });
+    }
+    document.getElementById("foot-data").textContent = `Orbit data: CelesTrak TLE, epoch ${data.tle_epoch}. Observer: ${data.site.name}, ${data.site.elevation_m.toLocaleString()} m.`;
+  }
+
+  drawSky();
+  drawScenario();
+  drawSummary();
+  drawMap();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawScenario);
+})();
+</script>
+</body>
+</html>

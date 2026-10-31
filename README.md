@@ -1,5 +1,7 @@
 # ISS Tracker
 
+**[Interactive showcase →](https://charleythebad.github.io/iss-tracker/)**: the ground track, sky path, radar noise and both filters, live in your browser.
+
 Predicts when the International Space Station passes overhead, whether you can
 see it, and tracks it through a pass with an Extended Kalman Filter fed by
 simulated radar measurements.
@@ -14,6 +16,7 @@ methods.
 | `iss_now.py` | Where the ISS is right now: latitude, longitude, altitude, speed |
 | `iss_passes.py` | Upcoming passes over your location for the next 3 days; `--visible` keeps only the ones you can see |
 | `kalman_track.py` | Simulated radar tracking of one pass, filtered with an EKF; prints an error table and saves a plot |
+| `export_site_data.py` | Writes `docs/data.json` for the interactive showcase page (`docs/index.html`) |
 | `compare_filters.py` | EKF vs Unscented Kalman Filter across four radar-quality scenarios, 30 Monte Carlo runs each |
 
 ## Setup
@@ -109,7 +112,8 @@ noise draws, 30 Monte Carlo runs per scenario.
   is about 1.6× faster. Once converged, the problem is close enough to linear
   that the EKF's Jacobian is a good approximation.
 - **On a very noisy radar the EKF becomes overconfident.** Its ANEES sits
-  around 10–13, so it believes it is 3–4× more accurate than it really is. The
+  around 10–13 against an ideal 3. ANEES compares squared errors, so its real
+  errors are about √(11.8/3) ≈ 2× larger than it claims. The
   UKF stays inside the 95% consistency band and is about a third more accurate.
   With 2° of angle noise, the uncertainty region is large enough that a
   single-point linearization misrepresents it.
